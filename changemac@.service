@@ -1,0 +1,50 @@
+# /etc/systemd/system/changemac@.service
+#
+
+[Unit]
+Description=Change MAC address for %i
+Documentation=man:macchanger(1)
+Wants=network-pre.target
+Before=network-pre.target
+BindsTo=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device
+Conflicts=NetworkManager-wait-online.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash -c ' \
+    IFACE="$1"; \
+    delay="${INTERFACE_DELAY:-1}"; \
+    logger -t macchanger "Changing MAC address for interface $IFACE"; \
+    ip link set dev "$IFACE" down || exit 1; \
+    sleep "$delay"; \
+    if command -v macchanger >/dev/null; then \
+        macchanger -r "$IFACE" && \
+        sleep "$delay" && \
+        ip link set dev "$IFACE" up && \
+        logger -t macchanger "Successfully changed MAC address for $IFACE"; \
+    else \
+        logger -p user.err -t macchanger "macchanger not found or failed for $IFACE"; \
+        exit 1; \
+    fi' _ %i
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+TimeoutSec=30
+StartLimitIntervalSec=120
+StartLimitBurst=5
+StandardOutput=journal
+SyslogIdentifier=macchanger
+
+# Security
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target%
